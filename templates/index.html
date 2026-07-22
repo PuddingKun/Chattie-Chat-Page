@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chattie | Premium AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        body { font-family: 'Lexend', sans-serif; background: #0F0E13; color: white; margin: 0; }
+        .sidebar { background: #000000; border-right: 1px solid rgba(255,255,255,0.05); }
+        .neon-green { color: #D1FF4D; }
+        .bg-neon-green { background: #D1FF4D; }
+        .chat-bubble-user { background: #7C69FF; border-radius: 20px 20px 4px 20px; }
+        .chat-bubble-bot { background: #1A1821; border-radius: 20px 20px 20px 4px; border: 1px solid rgba(255,255,255,0.05); }
+        .premium-input { background: #1A1821; border: 1px solid rgba(255,255,255,0.1); border-radius: 30px; }
+        .premium-input:focus-within { border-color: #D1FF4D; }
+        .history-item:hover { background: rgba(255,255,255,0.05); }
+        .history-item.active { background: rgba(255,255,255,0.1); border-left: 2px solid #D1FF4D; }
+        .hidden { display: none !important; }
+        #selection-screen { z-index: 100; background: #0F0E13; }
+        input:focus { outline: none !important; }
+        .cursor-input { caret-color: #D1FF4D; }
+
+        /* Mobile Sidebar Overhaul */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -100%;
+                top: 0;
+                height: 100%;
+                width: 280px;
+                z-index: 1000;
+                transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+                box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+            }
+            .sidebar.open { left: 0; }
+            .sidebar-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.5);
+                backdrop-filter: blur(4px);
+                z-index: 999;
+                display: none;
+            }
+            .sidebar-overlay.open { display: block; }
+        }
+    </style>
+</head>
+<body class="h-screen flex overflow-hidden bg-chattie">
+    <div id="sidebar-overlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <!-- Step 1: Selection Screen (Onboarding + Bot Pick) -->
+    <div id="selection-screen" class="fixed inset-0 flex flex-col items-center justify-center px-4 overflow-y-auto">
+        
+        <!-- Onboarding -->
+        <div id="onboarding-step" class="w-full max-w-md text-center">
+            <h1 class="text-5xl md:text-6xl font-bold mb-6 tracking-tighter">Welcome.</h1>
+            <p class="text-gray-500 text-sm mb-12">Enter your name to begin the experience.</p>
+            <div class="relative group">
+                <input type="text" id="display-name-input" class="cursor-input w-full bg-transparent border-b-2 border-white/10 py-4 text-2xl font-bold text-center focus:border-[#D1FF4D] transition-all outline-none" placeholder="Type your name..." oninput="toggleOnboardingButton()" onkeydown="if(event.key === 'Enter') showBotSelection()">
+                <div class="absolute bottom-0 left-0 w-0 h-[2px] bg-[#D1FF4D] transition-all duration-500 group-focus-within:w-full"></div>
+            </div>
+            <button id="start-btn" onclick="showBotSelection()" class="mt-12 opacity-0 translate-y-4 pointer-events-none px-10 py-4 bg-white text-black rounded-full font-bold text-xs tracking-widest transition-all">CONTINUE</button>
+        </div>
+
+        <!-- Bot Pick -->
+        <div id="bot-selection-step" class="hidden w-full flex flex-col items-center">
+            <h2 class="text-4xl font-bold mb-16 tracking-tight">Meet the cast</h2>
+            <div class="flex flex-wrap justify-center gap-10">
+                <div onclick="selectBot('Mochi', '#FF7A60')" class="group text-center cursor-pointer">
+                    <div class="w-28 h-28 rounded-3xl bg-[#FF7A60] flex items-center justify-center shadow-2xl mb-4 group-hover:scale-110 transition-transform"><span class="text-4xl">🐱</span></div>
+                    <p class="text-sm font-bold text-gray-500 group-hover:text-white">Mochi</p>
+                </div>
+                <div onclick="selectBot('Uncle Byte', '#7C69FF')" class="group text-center cursor-pointer">
+                    <div class="w-28 h-28 rounded-3xl bg-[#7C69FF] flex items-center justify-center shadow-2xl mb-4 group-hover:scale-110 transition-transform"><span class="text-4xl">🤖</span></div>
+                    <p class="text-sm font-bold text-gray-500 group-hover:text-white">Uncle Byte</p>
+                </div>
+                <div onclick="selectBot('Nyx', '#D1FF4D')" class="group text-center cursor-pointer">
+                    <div class="w-28 h-28 rounded-3xl bg-[#D1FF4D] flex items-center justify-center shadow-2xl mb-4 group-hover:scale-110 transition-transform"><span class="text-4xl">👑</span></div>
+                    <p class="text-sm font-bold text-gray-500 group-hover:text-white">Nyx</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 2: Main Layout (Sidebar + Chat) -->
+    <div id="chat-layout" class="hidden flex h-full w-full">
+        
+        <!-- Sidebar (ChatGPT Style) -->
+        <aside id="sidebar" class="sidebar w-64 md:w-72 flex flex-col h-full shrink-0">
+            <div class="p-4">
+                <div class="flex items-center gap-2 mb-8 px-2">
+                    <div class="w-5 h-5 bg-[#D1FF4D] rounded-full flex items-center justify-center"><div class="w-1.5 h-1.5 bg-black rounded-full"></div></div>
+                    <span class="font-bold text-sm tracking-tight">Chattie.</span>
+                </div>
+                
+                <button onclick="createNewChat()" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 hover:bg-white/5 transition-all text-xs font-bold mb-8">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                    New Chat
+                </button>
+                
+                <div id="chat-history-list" class="space-y-1 overflow-y-auto max-h-[calc(100vh-280px)] pr-2">
+                    <p class="px-2 text-[10px] font-bold text-gray-600 uppercase tracking-widest mb-4">History</p>
+                    <!-- History Items -->
+                </div>
+            </div>
+            
+            <!-- User Account Section (Bottom) -->
+            <div class="mt-auto p-4 border-t border-white/5 bg-black/40">
+                <div class="flex items-center justify-between group px-2 py-2">
+                    <div class="flex items-center gap-3">
+                        <div id="user-pfp-sidebar" class="w-8 h-8 rounded-full bg-gradient-to-tr from-[#7C69FF] to-[#D1FF4D] flex items-center justify-center text-[10px] font-bold text-black uppercase"></div>
+                        <div class="truncate max-w-[100px]">
+                            <p id="user-name-sidebar" class="text-xs font-bold truncate"></p>
+                            <p class="text-[9px] text-gray-500">Premium</p>
+                        </div>
+                    </div>
+                    <button onclick="logout()" class="p-2 text-gray-500 hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Chat Area -->
+        <main class="flex-1 flex flex-col h-full bg-[#0F0E13] overflow-hidden">
+            <header class="h-16 flex items-center justify-between px-4 md:px-8 border-b border-white/5">
+                <div class="flex items-center gap-2 md:gap-4">
+                    <button onclick="toggleSidebar()" class="md:hidden p-2 text-gray-400 hover:text-[#D1FF4D] transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
+                    <div id="header-pfp" class="w-8 h-8 rounded-full flex items-center justify-center shadow-lg"><span id="header-emoji" class="text-lg"></span></div>
+                    <h2 id="bot-name" class="text-sm font-bold tracking-tight"></h2>
+                </div>
+                <button onclick="backToSelection()" class="text-[10px] font-bold uppercase tracking-widest text-gray-600 hover:text-white transition-colors">Switch Bot</button>
+            </header>
+
+            <div id="chat-messages" class="flex-1 overflow-y-auto">
+                <div class="max-w-3xl mx-auto py-12 px-6 space-y-8" id="message-list">
+                    <!-- Messages -->
+                </div>
+            </div>
+
+            <!-- Premium Floating Input -->
+            <div class="pb-10 px-6">
+                <div class="max-w-3xl mx-auto relative">
+                    <div class="premium-input flex items-center px-6 py-3 shadow-2xl">
+                        <input type="text" id="user-input" placeholder="Type a message..." class="flex-1 bg-transparent border-none text-sm font-medium py-1" onkeydown="if(event.key === 'Enter') sendMessage()">
+                        <button onclick="sendMessage()" class="ml-4 p-2 bg-[#D1FF4D] text-black rounded-xl hover:scale-105 transition-transform"><svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg></button>
+                    </div>
+                    <p class="text-[9px] text-center mt-4 text-gray-700 font-bold uppercase tracking-widest">Chattie Premium AI</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Custom Modal -->
+    <div id="custom-modal" class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-sm px-4">
+        <div class="bg-[#1A1821] border border-white/10 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl">
+            <div class="w-16 h-16 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></div>
+            <h3 class="text-xl font-bold mb-2">Clear history?</h3><p class="text-gray-500 text-sm mb-8 font-medium">This will permanently delete all your chats for this session.</p>
+            <div class="flex gap-4"><button onclick="closeModal()" class="flex-1 py-3 rounded-xl bg-white/5 font-bold text-xs hover:bg-white/10">CANCEL</button><button onclick="confirmLogout()" class="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-xs hover:bg-red-600">CLEAR ALL</button></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
